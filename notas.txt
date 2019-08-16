@@ -1,7 +1,0 @@
-Organizar a formatação do output(log)
-Converter os dados do acelerômetro
-armazenar convertido
-resolver o problema de leitura do gps
-adicionar um timestamp pras leituras
-colocar uma leitura a cada 5s
-fazer o output do log ser o mesmo do monitor serial
