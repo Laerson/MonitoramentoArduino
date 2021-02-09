@@ -115,7 +115,12 @@ void setup() {
 
 
 
-void loop() {
+void loop()
+{
+  String sd_data = ""; //String que vai ser escrita no cartão SD ao final do loop
+  String *sd_data_pointer; //ponteiro para a variável sd_data
+  sd_data_pointer = &sd_data;
+  
 
 //--------------------Codigo do Acelerometro/Giroscopio--------------------//
   // read raw accel/gyro measurements from device
@@ -128,12 +133,25 @@ void loop() {
     #ifdef OUTPUT_READABLE_ACCELGYRO
         // display tab-separated accel/gyro x/y/z values
         Serial.print("a/g:\t");
+        sd_data += "a/g:\t";
         Serial.print(ax/16384); Serial.print("\t");
+        sd_data += (ax/16384);
+        sd_data += "\t";
         Serial.print(ay/16384); Serial.print("\t");
+        sd_data += ay/16384;
+        sd_data += "\t";
         Serial.print(az/16384); Serial.print("\t");
+        sd_data += az/16384;
+        sd_data += "\t";
         Serial.print(gx/131); Serial.print("\t");
+        sd_data += gx/131;
+        sd_data += "\t";
         Serial.print(gy/131); Serial.print("\t");
+        sd_data += gy/131;
+        sd_data += "\t";
         Serial.println(gz/131);
+        sd_data += gz/131;
+        sd_data += "\n\n";
     #endif
 
     #ifdef OUTPUT_BINARY_ACCELGYRO
@@ -151,35 +169,70 @@ void loop() {
   // Displays information when new sentence is available.
   while (Serial1.available() > 0)
     if (gps.encode(Serial1.read()))
-      displayInfo();
+      displayInfo(sd_data_pointer);
 
 
     if(millis() > 5000 && gps.charsProcessed() < 10) {
       Serial.println("No GPS detected");
       while(true);
     }
+    
+
+  data_file = SD.open("data.txt", FILE_WRITE);
+  
+  if(data_file)
+  {
+    getData(sd_data);
+  }  
+  else
+  {
+    Serial.println("error opening data.txt");
+  }
 }
 
 
-void displayInfo()
+void displayInfo(String *sd_data_pointer)
 {
 
+  String sd_data = *sd_data_pointer;
+
   if (gps.location.isValid())
-  {
-    Serial.print("LAT="); Serial.println(gps.location.lat(), 6); // Latitude in degrees (double)
-    Serial.print("LNG="); Serial.println(gps.location.lng(), 6); // Longitude in degrees (double)
-    Serial.print(gps.location.rawLat().negative ? "-" : "+");
+  { 
+    sd_data += "gps data:\n";
+    
+    String latitude = "LAT=" + String(gps.location.lat(), 6) + "\n";
+    Serial.print(latitude); // Latitude in degrees (double);
+    sd_data += latitude;
+    
+    String longitude = "LNG=" + String(gps.location.lng(), 6) + "\n";
+    Serial.print(longitude); // Longitude in degrees (double)
+    sd_data += longitude;
+
+    String velocidade = "Velocidade=" + String(gps.speed.kmph()) + " KM/H" + "\n";  
+    Serial.print(velocidade); // Speed in kilometers per hour (double)
+    sd_data += velocidade;
+
+    String data_calendario = "DATA=" + String(gps.date.value()) + "\n";
+    Serial.print("DATA="); Serial.println(gps.date.value()); // Raw date in DDMMYY format (u32)
+    sd_data += data_calendario;
+    
+    String hora_utc = "Hora UTC=" + String(gps.time.value()) + "\n";
+    Serial.print(hora_utc); // Raw time in HHMMSSCC format (u32)
+    sd_data += hora_utc;
+
+    String hora_brasilia = "Hora (Brasilia)=" + String(gps.time.value() - 3000000) + "\n";
+    Serial.print(hora_brasilia); // Raw time in HHMMSSCC format (u32)
+    sd_data += hora_brasilia;
+    
+    /*Serial.print(gps.location.rawLat().negative ? "-" : "+");
     Serial.println(gps.location.rawLat().deg); // Raw latitude in whole degrees
     Serial.println(gps.location.rawLat().billionths);// ... and billionths (u16/u32)
     Serial.print(gps.location.rawLng().negative ? "-" : "+");
     Serial.println(gps.location.rawLng().deg); // Raw longitude in whole degrees
     Serial.println(gps.location.rawLng().billionths);// ... and billionths (u16/u32)
-    Serial.print("DATA="); Serial.println(gps.date.value()); // Raw date in DDMMYY format (u32)
     Serial.print("ANO="); Serial.println(gps.date.year()); // Year (2000+) (u16)
     Serial.print("Mes="); Serial.println(gps.date.month()); // Month (1-12) (u8)
     Serial.println(gps.date.day()); // Day (1-31) (u8)
-    Serial.print("Hora (UTC)="); Serial.println(gps.time.value()); // Raw time in HHMMSSCC format (u32)
-    Serial.print("Hora (Horario de Brasilia)="); Serial.println(gps.time.value() - 3000000); // Raw time in HHMMSSCC format (u32)
     Serial.println(gps.time.hour()); // Hour (0-23) (u8)
     Serial.println(gps.time.minute()); // Minute (0-59) (u8)
     Serial.println(gps.time.second()); // Second (0-59) (u8)
@@ -187,8 +240,7 @@ void displayInfo()
     Serial.println(gps.speed.value()); // Raw speed in 100ths of a knot (i32)
     Serial.println(gps.speed.knots()); // Speed in knots (double)
     Serial.println(gps.speed.mph()); // Speed in miles per hour (double)
-    Serial.println(gps.speed.mps()); // Speed in meters per second (double)
-    Serial.println(gps.speed.kmph()); // Speed in kilometers per hour (double)
+    Serial.println(gps.speed.mps()); // Speed in meters per second (double)    
     Serial.println(gps.course.value()); // Raw course in 100ths of a degree (i32)
     Serial.println(gps.course.deg()); // Course in degrees (double)
     Serial.println(gps.altitude.value()); // Raw altitude in centimeters (i32)
@@ -197,36 +249,29 @@ void displayInfo()
     Serial.println(gps.altitude.kilometers()); // Altitude in kilometers (double)
     Serial.println(gps.altitude.feet()); // Altitude in feet (double)
     Serial.println(gps.satellites.value()); // Number of satellites in use (u32)
-    Serial.println(gps.hdop.value()); // Horizontal Dim. of Precision (100ths-i32)
+    Serial.println(gps.hdop.value()); // Horizontal Dim. of Precision (100ths-i32)*/
   }
   
   else
   { 
     Serial.print(F("INVALID"));
+    sd_data += "Dados do GPS inválidos \n";
   }
   
   
   Serial.println();
+  sd_data += "\n";
   
-  data_file = SD.open("data.txt", FILE_WRITE);
-  
-  if(data_file)
-  {
-      getData();
-  }
-  
-  else
-  {
-    Serial.println("error opening data.txt");
-  }
+
   
   delay(1000); //intervalo do loop em microsegundos
 }
 
+  
+
 
 //------------------Funçoes auxiliares------------------------//
-void getData() {
-  data_file.print("teste\n");
-  data_file.flush();
+void getData(String data) {
+  data_file.print(data);
   data_file.close();
 }
