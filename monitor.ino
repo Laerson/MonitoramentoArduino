@@ -1,34 +1,77 @@
-//******************//
-//Biblioteca do GPS//
-//****************//
-//************************************************************//
-//Baixa no link(http://arduiniana.org/libraries/tinygpsplus/)//
-//Sketch -> Incluir Biblioteca -> Adicionar biblioteca .ZIP //   
-//*********************************************************//
+/*Conexão dos módulos no arduino mega 2560 */
 
-#include <TinyGPS++.h>
+/*
+ * módulo SD:
+ * CS -> 53
+ * SCK -> 52
+ * MOSI -> 51
+ * MISO -> 50
+ */
 
-//********************************************************//
-//Bibliotecas do acelerômetro e da interface do cartão SD//
-// Necessário Importar (Ctrl+shift+I)                   //
-//*****************************************************//
+ /*
+  * Módulo GPS: 
+  * Rx -> 18
+  * Tx -> 19
+  */
+
+  /*
+   * MPU6050 (giroscopio + acelerômetro)
+   * SDA -> 20
+   * SCL -> 21
+   */
+
+// I2C device class (I2Cdev) demonstration Arduino sketch for MPU6050 class
+// 10/7/2011 by Jeff Rowberg <jeff@rowberg.net>
+// Updates should (hopefully) always be available at https://github.com/jrowberg/i2cdevlib
+//
+// Changelog:
+//      2013-05-08 - added multiple output formats
+//                 - added seamless Fastwire support
+//      2011-10-07 - initial release
+
+/* ============================================
+I2Cdev device library code is placed under the MIT license
+Copyright (c) 2011 Jeff Rowberg
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+===============================================
+*/
+
+// I2Cdev and MPU6050 must be installed as libraries, or else the .cpp/.h files
+// for both classes must be in the include path of your project
 #include <MPU6050.h>
-#include <SD.h>
-
-//*******************************//
-//Bibliotecas já inclusas no IDE//
-//*****************************//
-
 #include <SPI.h>
-#include <Wire.h>
+#include <SD.h>
+#include <TinyGPS++.h>
+#include "I2Cdev.h"
 
-//Biblioteca para calibrar o acelerometro//
-//#include "I2Cdev.h"
 
-//************************//
-//                       //
-//**********************//
+// The TinyGPS++ object
 TinyGPSPlus gps;
+
+const int chipSelect = 53;
+
+// Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
+// is used in I2Cdev.h
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+    #include "Wire.h"
+#endif
 
 // class default I2C address is 0x68
 // specific I2C addresses may be passed as a parameter here
@@ -39,6 +82,8 @@ MPU6050 accelgyro;
 
 int16_t ax, ay, az;
 int16_t gx, gy, gz;
+
+
 
 // uncomment "OUTPUT_READABLE_ACCELGYRO" if you want to see a tab-separated
 // list of the accel X/Y/Z and then gyro X/Y/Z values in decimal. Easy to read,
@@ -52,33 +97,30 @@ int16_t gx, gy, gz;
 //#define OUTPUT_BINARY_ACCELGYRO
 
 
-
-File data_file;
-int CS_pin = 53; //Pino ligado ao CS do adaptador do cartao SD. Alterar caso esteja conectado à outro pino //
-bool acelCheck = false;
+#define LED_PIN 13
+bool blinkState = false;
 
 void setup() {
-  Wire.begin();
+  // Open serial communications and wait for port to open:
+  Serial.begin(9600);
   Serial1.begin(9600);
-  Serial.begin(9600); //Setting baudrate at 9600
-  pinMode(CS_pin, OUTPUT);//declaring CS pin as output pin
-
-//----------------------------------------------------------------------------//
-//-------------------------Inicializaçao do Cartao de memoria----------------//
-//--------------------------------------------------------------------------//
-  if (SD.begin()) {
-    Serial.println("SD card is initialized and it is ready to use");
-    } 
-    else {
-      Serial.println("SD card is not initialized");
-      return;
-      }
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
 
 
-//------------------------------------------------------------------------//
-//--------------------Inicializaçao do acelerometro/giroscopio-----------//
-//----------------------------------------------------------------------//
+  //Inicialização do cartão SD
+  Serial.print("Initializing SD card...");
 
+  // see if the card is present and can be initialized:
+  if (!SD.begin(chipSelect)) {
+    Serial.println("Card failed, or not present");
+    // don't do anything more:
+    while (1);
+  }
+  Serial.println("card initialized.");
+
+  // initialize device
     Serial.println("Initializing I2C devices...");
     accelgyro.initialize();
 
@@ -86,9 +128,7 @@ void setup() {
     Serial.println("Testing device connections...");
     Serial.println(accelgyro.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
 
-
-//O codigo abaixo serve para mudar a precisao dos sensores
-//e necessario achar os "offsets" antes, com outro programa .ino
+    // use the code below to change accel/gyro offset values
     /*
     Serial.println("Updating internal sensor offsets...");
     // -76  -2359 1688  0 0 0
@@ -99,9 +139,7 @@ void setup() {
     Serial.print(accelgyro.getYGyroOffset()); Serial.print("\t"); // 0
     Serial.print(accelgyro.getZGyroOffset()); Serial.print("\t"); // 0
     Serial.print("\n");
-    accelgyro.setXGyroOffset(220);
-    accelgyro.setYGyroOffset(76);
-    accelgyro.setZGyroOffset(-85);
+   
     Serial.print(accelgyro.getXAccelOffset()); Serial.print("\t"); // -76
     Serial.print(accelgyro.getYAccelOffset()); Serial.print("\t"); // -2359
     Serial.print(accelgyro.getZAccelOffset()); Serial.print("\t"); // 1688
@@ -111,18 +149,25 @@ void setup() {
     Serial.print("\n");
     */
 
+    //           X Accel  Y Accel  Z Accel   X Gyro   Y Gyro   Z Gyro
+   //OFFSETS     -422,   -1187,    1699,     326,     -94,     -33
+   
+    accelgyro.setXAccelOffset(-422);
+    accelgyro.setYAccelOffset(-1187);
+    accelgyro.setZAccelOffset(1699);
+    accelgyro.setXGyroOffset(326);
+    accelgyro.setYGyroOffset(-94);
+    accelgyro.setZGyroOffset(-33);
+
+    // configure Arduino LED pin for output
+    pinMode(LED_PIN, OUTPUT);
+  
 }
 
+void loop() {
+  // String para ser passada para o cartão SD
+  String dataString = "";
 
-
-void loop()
-{
-  String sd_data = ""; //String que vai ser escrita no cartão SD ao final do loop
-  String *sd_data_pointer; //ponteiro para a variável sd_data
-  sd_data_pointer = &sd_data;
-  
-
-//--------------------Codigo do Acelerometro/Giroscopio--------------------//
   // read raw accel/gyro measurements from device
     accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
@@ -132,26 +177,14 @@ void loop()
 
     #ifdef OUTPUT_READABLE_ACCELGYRO
         // display tab-separated accel/gyro x/y/z values
-        Serial.print("a/g:\t");
-        sd_data += "a/g:\t";
-        Serial.print(ax/16384); Serial.print("\t");
-        sd_data += (ax/16384);
-        sd_data += "\t";
-        Serial.print(ay/16384); Serial.print("\t");
-        sd_data += ay/16384;
-        sd_data += "\t";
-        Serial.print(az/16384); Serial.print("\t");
-        sd_data += az/16384;
-        sd_data += "\t";
-        Serial.print(gx/131); Serial.print("\t");
-        sd_data += gx/131;
-        sd_data += "\t";
-        Serial.print(gy/131); Serial.print("\t");
-        sd_data += gy/131;
-        sd_data += "\t";
-        Serial.println(gz/131);
-        sd_data += gz/131;
-        sd_data += "\n\n";
+        dataString += ("a/g:\t");
+        dataString += String(ax / 16384.0); dataString += ("\t");
+        dataString += String(ay / 16384.0); dataString += ("\t");
+        dataString += String(az / 16384.0); dataString += ("\t");
+        dataString += String(gx / 131.0); dataString += ("\t");
+        dataString += String(gy / 131.0); dataString += ("\t");
+        dataString += String(gz / 131.0);
+        dataString += "\n";
     #endif
 
     #ifdef OUTPUT_BINARY_ACCELGYRO
@@ -163,115 +196,159 @@ void loop()
         Serial.write((uint8_t)(gz >> 8)); Serial.write((uint8_t)(gz & 0xFF));
     #endif
 
+    // blink LED to indicate activity
+    blinkState = !blinkState;
+    digitalWrite(LED_PIN, blinkState);
 
-//Codigo do GPS//
-
-  // Displays information when new sentence is available.
+  // This sketch displays information every time a new sentence is correctly encoded.
   while (Serial1.available() > 0)
     if (gps.encode(Serial1.read()))
-      displayInfo(sd_data_pointer);
+      dataString += displayInfo();
 
-
-    if(millis() > 5000 && gps.charsProcessed() < 10) {
-      Serial.println("No GPS detected");
-      while(true);
-    }
-    
-
-  data_file = SD.open("data.txt", FILE_WRITE);
-  
-  if(data_file)
+  if (millis() > 5000 && gps.charsProcessed() < 10)
   {
-    getData(sd_data);
-  }  
-  else
-  {
-    Serial.println("error opening data.txt");
+    Serial.println(F("No GPS detected: check wiring."));
+    while(true);
   }
+
+  // open the file. note that only one file can be open at a time,
+  // so you have to close this one before opening another.
+  File dataFile = SD.open("datalog.txt", FILE_WRITE);
+
+  // if the file is available, write to it:
+  if (dataFile) {
+    dataFile.println(dataString);
+    dataFile.close();
+    // print to the serial port too:
+    Serial.println(dataString);
+  }
+  // if the file isn't open, pop up an error:
+  else {
+    Serial.println("error opening datalog.txt");
+  }
+
 }
 
-
-void displayInfo(String *sd_data_pointer)
+String displayInfo()
 {
-
-  String sd_data = *sd_data_pointer;
-
+  String dataString = "";
+  
+  //Serial.print(F("Location: "));
+  dataString += (F("Location: "));
   if (gps.location.isValid())
-  { 
-    sd_data += "gps data:\n";
-    
-    String latitude = "LAT=" + String(gps.location.lat(), 6) + "\n";
-    Serial.print(latitude); // Latitude in degrees (double);
-    sd_data += latitude;
-    
-    String longitude = "LNG=" + String(gps.location.lng(), 6) + "\n";
-    Serial.print(longitude); // Longitude in degrees (double)
-    sd_data += longitude;
-
-    String velocidade = "Velocidade=" + String(gps.speed.kmph()) + " KM/H" + "\n";  
-    Serial.print(velocidade); // Speed in kilometers per hour (double)
-    sd_data += velocidade;
-
-    String data_calendario = "DATA=" + String(gps.date.value()) + "\n";
-    Serial.print("DATA="); Serial.println(gps.date.value()); // Raw date in DDMMYY format (u32)
-    sd_data += data_calendario;
-    
-    String hora_utc = "Hora UTC=" + String(gps.time.value()) + "\n";
-    Serial.print(hora_utc); // Raw time in HHMMSSCC format (u32)
-    sd_data += hora_utc;
-
-    String hora_brasilia = "Hora (Brasilia)=" + String(gps.time.value() - 3000000) + "\n";
-    Serial.print(hora_brasilia); // Raw time in HHMMSSCC format (u32)
-    sd_data += hora_brasilia;
-    
-    /*Serial.print(gps.location.rawLat().negative ? "-" : "+");
-    Serial.println(gps.location.rawLat().deg); // Raw latitude in whole degrees
-    Serial.println(gps.location.rawLat().billionths);// ... and billionths (u16/u32)
-    Serial.print(gps.location.rawLng().negative ? "-" : "+");
-    Serial.println(gps.location.rawLng().deg); // Raw longitude in whole degrees
-    Serial.println(gps.location.rawLng().billionths);// ... and billionths (u16/u32)
-    Serial.print("ANO="); Serial.println(gps.date.year()); // Year (2000+) (u16)
-    Serial.print("Mes="); Serial.println(gps.date.month()); // Month (1-12) (u8)
-    Serial.println(gps.date.day()); // Day (1-31) (u8)
-    Serial.println(gps.time.hour()); // Hour (0-23) (u8)
-    Serial.println(gps.time.minute()); // Minute (0-59) (u8)
-    Serial.println(gps.time.second()); // Second (0-59) (u8)
-    Serial.println(gps.time.centisecond()); // 100ths of a second (0-99) (u8)
-    Serial.println(gps.speed.value()); // Raw speed in 100ths of a knot (i32)
-    Serial.println(gps.speed.knots()); // Speed in knots (double)
-    Serial.println(gps.speed.mph()); // Speed in miles per hour (double)
-    Serial.println(gps.speed.mps()); // Speed in meters per second (double)    
-    Serial.println(gps.course.value()); // Raw course in 100ths of a degree (i32)
-    Serial.println(gps.course.deg()); // Course in degrees (double)
-    Serial.println(gps.altitude.value()); // Raw altitude in centimeters (i32)
-    Serial.println(gps.altitude.meters()); // Altitude in meters (double)
-    Serial.println(gps.altitude.miles()); // Altitude in miles (double)
-    Serial.println(gps.altitude.kilometers()); // Altitude in kilometers (double)
-    Serial.println(gps.altitude.feet()); // Altitude in feet (double)
-    Serial.println(gps.satellites.value()); // Number of satellites in use (u32)
-    Serial.println(gps.hdop.value()); // Horizontal Dim. of Precision (100ths-i32)*/
+  {
+    //Serial.print(gps.location.lat(), 6);
+    dataString += String(gps.location.lat(), 6);
+    //Serial.print(F(","));
+    dataString += (F(","));
+    //Serial.print(gps.location.lng(), 6);
+    dataString += String(gps.location.lng(), 6);
   }
-  
   else
-  { 
-    Serial.print(F("INVALID"));
-    sd_data += "Dados do GPS inválidos \n";
+  {
+    //Serial.print(F("INVALID"));
+    dataString += (F("INVALID"));
   }
-  
-  
-  Serial.println();
-  sd_data += "\n";
-  
 
-  
-  delay(1000); //intervalo do loop em microsegundos
-}
+  //Serial.print(F("  Date/Time: "));
+  dataString += (F("  Date/Time: "));
+  if (gps.date.isValid())
+  {
+    int hora = gps.time.hour() - 3;
+    int dia = gps.date.day();
+    int mes = gps.date.month();
+    int ano = gps.date.year();
+    if (hora < 0) dia -= 1;
+    if (dia == 0) {
+      
+      mes -= 1;
+      if (mes == 0){
+        ano -= 1;
+        mes = 12;
+      }
+      
+      switch (mes) {
+        case 2:                    
+          if ( ( ano % 4 == 0 && ano % 100 != 0 ) || ano % 400 == 0 ) {
+            dia = 29;
+          }
+          else {
+            dia = 28;
+          }
+          break;
 
-  
+        case 1:
+        dia = 31;
+        break;
+        case 3:
+        dia = 31;
+        break;
+        case 5:
+        dia = 31;
+        break;
+        case 7:
+        dia = 31;
+        break;
+        case 8:
+        dia = 31;
+        break;
+        case 10:
+        dia = 31;
+        break;
+        case 12:
+        dia = 31;
+        break;
+        default:
+        dia = 30;
+        break;
+      }
+    }
+    //Serial.print(gps.date.day());    
+    dataString += String(dia);
+    //Serial.print(F("/"));
+    dataString += (F("/"));
+    //Serial.print(gps.date.month());
+    dataString += String(mes);
+    //Serial.print(F("/"));
+    dataString += (F("/"));
+    //Serial.print(gps.date.year());
+    dataString += String(ano);
+  }
+  else
+  {
+    //Serial.print(F("INVALID"));
+    dataString += (F("INVALID"));
+  }
 
+  dataString += (F(" "));
+  if (gps.time.isValid())
+  {
+    int hora = gps.time.hour() - 3;
+    if (hora < 0) hora += 24;
+    if (hora < 10) dataString += (F("0"));
+    //Serial.print(gps.time.hour() - 3);
+    dataString += String(hora);
+    //Serial.print(F(":"));
+    dataString += (F(":"));
+    if (gps.time.minute() < 10) dataString += (F("0"));
+    dataString += String(gps.time.minute());
+    dataString += (F(":"));
+    if (gps.time.second() < 10) dataString += (F("0"));
+    dataString += String(gps.time.second());
+    dataString += (F("."));
+    if (gps.time.centisecond() < 10) dataString += (F("0"));
+    dataString += String(gps.time.centisecond());
+  }
+  else
+  {
+    dataString += (F("INVALID"));
+  }
 
-//------------------Funçoes auxiliares------------------------//
-void getData(String data) {
-  data_file.print(data);
-  data_file.close();
+  dataString += "\nSpeed(KM/H) : ";
+  dataString += String(gps.speed.kmph());
+  dataString += "\n";
+
+  dataString += "\n";
+
+  return dataString;
 }
